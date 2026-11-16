@@ -1,0 +1,48 @@
+name: Build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # Works whether the repo holds the project files directly (pom.xml + src/)
+      # or a zip of the project in the repo root (any file name).
+      - name: Locate project
+        id: proj
+        run: |
+          if [ -f pom.xml ]; then
+            dir=.
+          else
+            zip=$(ls ./*.zip 2>/dev/null | head -n1)
+            if [ -z "$zip" ]; then
+              echo "No pom.xml and no .zip found in the repo root:"
+              ls -la
+              exit 1
+            fi
+            echo "Unzipping $zip"
+            mkdir -p build
+            unzip -o "$zip" -d build
+            pom=$(find build -name pom.xml | head -n1)
+            [ -n "$pom" ] || { echo "No pom.xml inside $zip"; exit 1; }
+            dir=$(dirname "$pom")
+          fi
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        working-directory: ${{ steps.proj.outputs.dir }}
+        run: mvn -B package
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CaneIslands
+          path: ${{ steps.proj.outputs.dir }}/target/CaneIslands.jar
